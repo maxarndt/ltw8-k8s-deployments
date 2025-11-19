@@ -1,57 +1,25 @@
 input:
-  stdin:
-    codec: lines
-
-# Note: when running interactively you'll see two identical lines:
-# 1) the terminal echo of what you typed
-# 2) Benthos' stdout output
-# To avoid the terminal echo, pipe or redirect input (see instructions above).
+  nats_jetstream:
+    urls: [ "tls://connect.ngs.global" ]
+    durable: "con01"
+    stream: "ltw8-temperature"
+    bind: true
+    auth:
+      user_credentials_file: "/Users/maxarndt/nats/NGS-Default-CLI.creds"
 
 pipeline:
   processors:
     - mapping: |
-        root.resourceMetrics = [{
-          "resource": {
-            "attributes": [{
-              "key": "service.name",
-              "value": {"stringValue": "benthos-stdin"}
-            }]
-          },
-          "scopeMetrics": [{
-            "scope": {"name": "ltw8-clima"},
-            "metrics": [{
-              "name": "temperature",
-              "unit": "C",
-              "gauge": {
-                "dataPoints": [{
-                  "attributes": [{
-                    "key": "timestamp",
-                    "value": {"stringValue": this.timestamp}
-                  }],
-                  "asDouble": this.value,
-                  "timeUnixNano": this.timestamp.ts_parse("2006-01-02T15:04:05Z07:00").format_timestamp_unix_nano()
-                }]
-              }
-            }]
-          }]
-        }]
+        root = "temperature{object=\"ltw8\", level=\"1\"} " + this.value.string() + " " + this.timestamp.ts_parse("2006-01-02T15:04:05Z07:00").format_timestamp_unix_milli().string()
 
-# Explicitly send processed messages to stdout so the program output is deterministic
+
 output:
-  stdout:
-    codec: lines
-
-# output:
-#   http_client:
-#     url: "https://VICTORIAMETRICS_OTEL_ENDPOINT/v1/metrics" # <-- anpassen
-#     verb: POST
-#     header:
-#       Content-Type: ["application/json"]
-#     retry:
-#       enabled: true
-#       max_retries: 3
-#       backoff:
-#         initial_interval: "1s"
-#         max_interval: "10s"
-#         max_elapsed_time: "60s"
-#     timeout: "10s"
+  # stdout:
+  #   codec: lines
+  http_client:
+    url: "http://localhost:8428/api/v1/import/prometheus"
+    verb: POST
+    headers:
+      "Content-Type": "text/plain"
+    retries: 3
+    timeout: "10s"
