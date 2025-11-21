@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wombat-ltw8-temperature
+  labels:
+    app: wombat-ltw8-temperature
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wombat-ltw8-temperature
+  template:
+    metadata:
+      labels:
+        app: wombat-ltw8-temperature
+    spec:
+      containers:
+        - name: wombat
+          image: ghcr.io/wombatwisdom/wombat:latest
+          args:
+            - run
+            - /config/ltw8_temperature.yaml
+          env:
+            - name: NATS_CREDS_FILE
+              value: "/secrets/nats/creds"
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+            - name: nats-creds
+              mountPath: /secrets/nats
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: ltw8-temperature-config
+        - name: nats-creds
+          secret:
+            secretName: nats
+            items:
+              - key: creds
+                path: creds

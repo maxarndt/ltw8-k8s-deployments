@@ -5,7 +5,7 @@ input:
     stream: "ltw8-temperature"
     bind: true
     auth:
-      user_credentials_file: "/Users/maxarndt/nats/NGS-Default-CLI.creds"
+      user_credentials_file: "${NATS_CREDS_FILE}"
 
 pipeline:
   processors:
@@ -14,12 +14,12 @@ pipeline:
         root = "temperature{object=\"ltw8\", level=\"" + $level + "\"} " + this.value.string() + " " + this.timestamp.ts_parse("2006-01-02T15:04:05Z07:00").format_timestamp_unix_milli().string()
 
 output:
-  # stdout:
-  #   codec: lines
-  http_client:
-    url: "http://localhost:8428/api/v1/import/prometheus"
-    verb: POST
-    headers:
-      "Content-Type": "text/plain"
-    retries: 3
-    timeout: "10s"
+  stdout:
+    codec: lines
+  # http_client:
+  #   url: "http://localhost:8428/api/v1/import/prometheus"
+  #   verb: POST
+  #   headers:
+  #     "Content-Type": "text/plain"
+  #   retries: 3
+  #   timeout: "10s"
