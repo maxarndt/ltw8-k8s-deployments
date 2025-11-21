@@ -1,0 +1,55 @@
+tests:
+  - name: "Extract level 1 from subject"
+    target_processors: "/pipeline/processors"
+    input_batch:
+      - json_content:
+          value: 25.5
+          timestamp: "2024-01-15T10:30:00Z"
+        metadata:
+          nats_subject: "climate.ltw8.1.temperature"
+    output_batches:
+      - - content_equals: 'temperature{object="ltw8", level="1"} 25.5 1705314600000'
+
+  - name: "Extract level 2 from subject"
+    target_processors: "/pipeline/processors"
+    input_batch:
+      - json_content:
+          value: 22.3
+          timestamp: "2024-01-15T10:30:00Z"
+        metadata:
+          nats_subject: "climate.ltw8.2.temperature"
+    output_batches:
+      - - content_equals: 'temperature{object="ltw8", level="2"} 22.3 1705314600000'
+
+  - name: "Handle integer temperature value"
+    target_processors: "/pipeline/processors"
+    input_batch:
+      - json_content:
+          value: 20
+          timestamp: "2024-06-01T00:00:00Z"
+        metadata:
+          nats_subject: "climate.ltw8.1.temperature"
+    output_batches:
+      - - content_equals: 'temperature{object="ltw8", level="1"} 20 1717200000000'
+
+  - name: "Handle negative temperature value"
+    target_processors: "/pipeline/processors"
+    input_batch:
+      - json_content:
+          value: -5.3
+          timestamp: "2024-12-25T18:45:30Z"
+        metadata:
+          nats_subject: "climate.ltw8.2.temperature"
+    output_batches:
+      - - content_equals: 'temperature{object="ltw8", level="2"} -5.3 1735152330000'
+
+  - name: "Handle timezone offset in timestamp"
+    target_processors: "/pipeline/processors"
+    input_batch:
+      - json_content:
+          value: 22.1
+          timestamp: "2024-03-10T14:00:00+02:00"
+        metadata:
+          nats_subject: "climate.ltw8.1.temperature"
+    output_batches:
+      - - content_equals: 'temperature{object="ltw8", level="1"} 22.1 1710072000000'

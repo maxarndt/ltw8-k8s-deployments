@@ -1,7 +1,7 @@
 input:
   nats_jetstream:
     urls: [ "tls://connect.ngs.global" ]
-    durable: "con01"
+    durable: "prometheus"
     stream: "ltw8-temperature"
     bind: true
     auth:
@@ -10,8 +10,8 @@ input:
 pipeline:
   processors:
     - mapping: |
-        root = "temperature{object=\"ltw8\", level=\"1\"} " + this.value.string() + " " + this.timestamp.ts_parse("2006-01-02T15:04:05Z07:00").format_timestamp_unix_milli().string()
-
+        let level = meta("nats_subject").split(".").index(2)
+        root = "temperature{object=\"ltw8\", level=\"" + $level + "\"} " + this.value.string() + " " + this.timestamp.ts_parse("2006-01-02T15:04:05Z07:00").format_timestamp_unix_milli().string()
 
 output:
   # stdout:
