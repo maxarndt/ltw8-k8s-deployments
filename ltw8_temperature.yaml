@@ -1,7 +1,7 @@
 input:
   nats_jetstream:
     urls: [ "tls://connect.ngs.global" ]
-    durable: "prometheus"
+    durable: "test01"
     stream: "ltw8-temperature"
     bind: true
     auth:
