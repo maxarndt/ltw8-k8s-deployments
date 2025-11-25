@@ -1,0 +1,99 @@
+# Velero Helm Chart Configuration
+# For Backblaze B2 with S3-compatible API and File System Backup (FSB)
+
+configuration:
+  # BackupStorageLocation configuration
+  backupStorageLocation:
+    - name: default
+      provider: aws
+      bucket: ltw8-backup
+      prefix: velero
+      default: true
+      config:
+        region: eu-central-003
+        s3ForcePathStyle: "true"
+        s3Url: https://s3.eu-central-003.backblazeb2.com
+        insecureSkipTLSVerify: "false"
+
+  # Disable VolumeSnapshotLocation (we use FSB only)
+  volumeSnapshotLocation: []
+
+  # Default backup settings
+  defaultBackupStorageLocation: default
+  defaultBackupTTL: 720h  # 30 days retention
+
+  # Exclude secrets from all backups
+  defaultExcludedResources:
+    - secrets
+
+  uploaderType: kopia
+
+# Enable node-agent for File System Backup (FSB)
+deployNodeAgent: true
+
+nodeAgent:
+  podVolumePath: /var/lib/kubelet/pods
+  privileged: false
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  tolerations:
+    - operator: Exists
+
+# Credentials for Backblaze S3
+# Create the secret manually before installing Velero (see README.md)
+credentials:
+  useSecret: true
+  name: velero-backblaze-credentials
+
+initContainers:
+  - name: velero-plugin-for-aws
+    image: velero/velero-plugin-for-aws:v1.10.0
+    volumeMounts:
+      - mountPath: /target
+        name: plugins
+
+image:
+  repository: velero/velero
+  tag: v1.15.0
+  pullPolicy: IfNotPresent
+
+kubectl:
+  image:
+    repository: bitnamilegacy/kubectl
+    tag: "1.33.4"
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 128Mi
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+
+metrics:
+  enabled: false
+  serviceMonitor:
+    enabled: false
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+
+schedules: {}

@@ -1,0 +1,81 @@
+---
+# Daily backup schedule for observability namespace (VictoriaMetrics)
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: observability-daily
+  namespace: velero
+spec:
+  # Daily at 02:00 AM
+  schedule: "0 2 * * *"
+
+  template:
+    # Include only observability namespace
+    includedNamespaces:
+      - observability
+
+    # Exclude secrets from backup
+    excludedResources:
+      - secrets
+
+    # Use default backup storage location (Backblaze S3)
+    storageLocation: default
+
+    # Use Kopia for uploading snapshots
+    uploaderConfig:
+      parallelFilesUpload: 5
+
+    # Enable File System Backup for PVCs
+    defaultVolumesToFsBackup: true
+
+    # Snapshot PVCs (in addition to FSB)
+    snapshotVolumes: false
+
+    # Backup TTL: 30 days
+    ttl: 720h
+
+    # Include cluster-scoped resources
+    includeClusterResources: true
+
+    # Ordered resources for proper restore sequence
+    orderedResources:
+      persistentvolumeclaims: "pvc1,pvc2"
+
+---
+# Daily backup schedule for grafana namespace
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: grafana-daily
+  namespace: velero
+spec:
+  # Daily at 02:15 AM (15 min after observability backup)
+  schedule: "15 2 * * *"
+
+  template:
+    # Include only grafana namespace
+    includedNamespaces:
+      - grafana
+
+    # Exclude secrets from backup
+    excludedResources:
+      - secrets
+
+    # Use default backup storage location (Backblaze S3)
+    storageLocation: default
+
+    # Use Kopia for uploading snapshots
+    uploaderConfig:
+      parallelFilesUpload: 5
+
+    # Enable File System Backup for PVCs
+    defaultVolumesToFsBackup: true
+
+    # Snapshot PVCs (in addition to FSB)
+    snapshotVolumes: false
+
+    # Backup TTL: 30 days
+    ttl: 720h
+
+    # Include cluster-scoped resources
+    includeClusterResources: true
