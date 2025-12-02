@@ -2,6 +2,11 @@
 # For Backblaze B2 with S3-compatible API and File System Backup (FSB)
 
 configuration:
+  # Set Kopia cache directory environment variable
+  extraEnvVars:
+    - name: KOPIA_CACHE_DIRECTORY
+      value: /udmrepo/cache
+
   # BackupStorageLocation configuration
   backupStorageLocation:
     - name: default
@@ -45,6 +50,15 @@ nodeAgent:
 
   tolerations:
     - operator: Exists
+
+  # Add volume for Kopia repository/cache
+  extraVolumes:
+    - name: udmrepo
+      emptyDir: {}
+
+  extraVolumeMounts:
+    - name: udmrepo
+      mountPath: /udmrepo
 
 # Credentials for Backblaze S3
 # Create the secret manually before installing Velero (see README.md)
@@ -95,5 +109,14 @@ containerSecurityContext:
     drop:
       - ALL
   readOnlyRootFilesystem: true
+
+# Add volume for Kopia repository/cache in main Velero pod
+extraVolumes:
+  - name: udmrepo
+    emptyDir: {}
+
+extraVolumeMounts:
+  - name: udmrepo
+    mountPath: /udmrepo
 
 schedules: {}

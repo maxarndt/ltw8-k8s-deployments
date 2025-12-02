@@ -39,7 +39,7 @@ spec:
 
     # Ordered resources for proper restore sequence
     orderedResources:
-      persistentvolumeclaims: "pvc1,pvc2"
+      persistentvolumeclaims: "victoriametrics-data"
 
 ---
 # Daily backup schedule for grafana namespace
@@ -79,3 +79,7 @@ spec:
 
     # Include cluster-scoped resources
     includeClusterResources: true
+
+    # Ordered resources for proper restore sequence
+    orderedResources:
+      persistentvolumeclaims: "grafana-data"
