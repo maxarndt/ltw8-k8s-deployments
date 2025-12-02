@@ -41,3 +41,47 @@ spec:
             items:
               - key: creds
                 path: creds
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wombat-ltw8-humidity
+  namespace: clima
+  labels:
+    app: wombat-ltw8-humidity
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wombat-ltw8-humidity
+  template:
+    metadata:
+      labels:
+        app: wombat-ltw8-humidity
+    spec:
+      containers:
+        - name: wombat
+          image: ghcr.io/wombatwisdom/wombat:latest
+          args:
+            - run
+            - /config/ltw8_humidity.yaml
+          env:
+            - name: NATS_CREDS_FILE
+              value: "/secrets/nats/creds"
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+            - name: nats-creds
+              mountPath: /secrets/nats
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: ltw8-humidity-config
+        - name: nats-creds
+          secret:
+            secretName: nats
+            items:
+              - key: creds
+                path: creds

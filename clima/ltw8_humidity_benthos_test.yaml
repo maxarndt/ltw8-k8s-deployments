@@ -1,0 +1,131 @@
+tests:
+  - name: "Extract level 1 from subject"
+    target_processors: "/pipeline/processors"
+    input_batch:
+      - json_content:
+          value: 65.5
+          timestamp: "2024-01-15T10:30:00Z"
+        metadata:
+          nats_subject: "climate.ltw8.1.humidity"
+    output_batches:
+      - - content_equals: 'humidity{object="ltw8", level="1"} 65.5 1705314600000'
+
+  - name: "Extract level 2 from subject"
+    target_processors: "/pipeline/processors"
+    input_batch:
+      - json_content:
+          value: 72.3
+          timestamp: "2024-01-15T10:30:00Z"
+        metadata:
+          nats_subject: "climate.ltw8.2.humidity"
+    output_batches:
+      - - content_equals: 'humidity{object="ltw8", level="2"} 72.3 1705314600000'
+
+  - name: "Handle integer humidity value"
+    target_processors: "/pipeline/processors"
+    input_batch:
+      - json_content:
+          value: 50
+          timestamp: "2024-06-01T00:00:00Z"
+        metadata:
+          nats_subject: "climate.ltw8.1.humidity"
+    output_batches:
+      - - content_equals: 'humidity{object="ltw8", level="1"} 50 1717200000000'
+
+  - name: "Handle high humidity value"
+    target_processors: "/pipeline/processors"
+    input_batch:
+      - json_content:
+          value: 95.8
+          timestamp: "2024-12-25T18:45:30Z"
+        metadata:
+          nats_subject: "climate.ltw8.2.humidity"
+    output_batches:
+      - - content_equals: 'humidity{object="ltw8", level="2"} 95.8 1735152330000'
+
+  - name: "Handle timezone offset in timestamp"
+    target_processors: "/pipeline/processors"
+    input_batch:
+      - json_content:
+          value: 68.1
+          timestamp: "2024-03-10T14:00:00+02:00"
+        metadata:
+          nats_subject: "climate.ltw8.1.humidity"
+    output_batches:
+      - - content_equals: 'humidity{object="ltw8", level="1"} 68.1 1710072000000'
+
+  - name: "Batch multiple messages from different levels"
+    target_processors: "/pipeline/processors"
+    input_batch:
+      - json_content:
+          value: 65.5
+          timestamp: "2024-01-15T10:30:00Z"
+        metadata:
+          nats_subject: "climate.ltw8.1.humidity"
+      - json_content:
+          value: 72.3
+          timestamp: "2024-01-15T10:30:15Z"
+        metadata:
+          nats_subject: "climate.ltw8.2.humidity"
+      - json_content:
+          value: 68.0
+          timestamp: "2024-01-15T10:30:30Z"
+        metadata:
+          nats_subject: "climate.ltw8.1.humidity"
+    output_batches:
+      - - content_equals: 'humidity{object="ltw8", level="1"} 65.5 1705314600000'
+        - content_equals: 'humidity{object="ltw8", level="2"} 72.3 1705314615000'
+        - content_equals: 'humidity{object="ltw8", level="1"} 68 1705314630000'
+
+  - name: "Batch with mixed value types (integer and float)"
+    target_processors: "/pipeline/processors"
+    input_batch:
+      - json_content:
+          value: 50
+          timestamp: "2024-06-01T00:00:00Z"
+        metadata:
+          nats_subject: "climate.ltw8.1.humidity"
+      - json_content:
+          value: 55.5
+          timestamp: "2024-06-01T00:00:10Z"
+        metadata:
+          nats_subject: "climate.ltw8.1.humidity"
+      - json_content:
+          value: 60
+          timestamp: "2024-06-01T00:00:20Z"
+        metadata:
+          nats_subject: "climate.ltw8.2.humidity"
+      - json_content:
+          value: 65.3
+          timestamp: "2024-06-01T00:00:30Z"
+        metadata:
+          nats_subject: "climate.ltw8.2.humidity"
+    output_batches:
+      - - content_equals: 'humidity{object="ltw8", level="1"} 50 1717200000000'
+        - content_equals: 'humidity{object="ltw8", level="1"} 55.5 1717200010000'
+        - content_equals: 'humidity{object="ltw8", level="2"} 60 1717200020000'
+        - content_equals: 'humidity{object="ltw8", level="2"} 65.3 1717200030000'
+
+  - name: "Test HTTP output format with batch (archive lines)"
+    target_outputs: "/output"
+    input_batch:
+      - json_content:
+          value: 65.5
+          timestamp: "2024-01-15T10:30:00Z"
+        metadata:
+          nats_subject: "climate.ltw8.1.humidity"
+      - json_content:
+          value: 72.3
+          timestamp: "2024-01-15T10:30:15Z"
+        metadata:
+          nats_subject: "climate.ltw8.2.humidity"
+      - json_content:
+          value: 68.0
+          timestamp: "2024-01-15T10:30:30Z"
+        metadata:
+          nats_subject: "climate.ltw8.1.humidity"
+    output_batches:
+      - - content_equals: |
+            humidity{object="ltw8", level="1"} 65.5 1705314600000
+            humidity{object="ltw8", level="2"} 72.3 1705314615000
+            humidity{object="ltw8", level="1"} 68 1705314630000

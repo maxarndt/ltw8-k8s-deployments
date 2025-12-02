@@ -1,0 +1,29 @@
+input:
+  nats_jetstream:
+    urls: [ "tls://connect.ngs.global" ]
+    durable: "wombat01"
+    stream: "ltw8-humidity"
+    bind: true
+    auth:
+      user_credentials_file: "${NATS_CREDS_FILE}"
+
+pipeline:
+  processors:
+    - mapping: |
+        let level = meta("nats_subject").split(".").index(2)
+        root = "humidity{object=\"ltw8\", level=\"" + $level + "\"} " + this.value.string() + " " + this.timestamp.ts_parse("2006-01-02T15:04:05Z07:00").format_timestamp_unix_milli().string()
+
+output:
+  http_client:
+    url: "http://victoriametrics.observability.svc.cluster.local:8428/api/v1/import/prometheus"
+    verb: POST
+    headers:
+      "Content-Type": "text/plain"
+    retries: 3
+    timeout: "10s"
+    batching:
+      count: 100
+      period: "10s"
+      processors:
+        - archive:
+            format: lines

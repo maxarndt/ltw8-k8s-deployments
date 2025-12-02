@@ -1,12 +1,17 @@
 # LTW8 Clima OTEL Ingest
 
-Wombat Pipeline zum Ingestieren von LTW8 Temperaturdaten via NATS JetStream nach VictoriaMetrics.
+Wombat Pipelines zum Ingestieren von LTW8 Klima-Daten (Temperatur und Luftfeuchtigkeit) via NATS JetStream nach VictoriaMetrics.
 
 ## Lokale Ausführung
 
 ```bash
 export NATS_CREDS_FILE="/path/to/your/credentials.creds"
+
+# Temperatur-Pipeline
 wombat run ltw8_temperature.yaml
+
+# Luftfeuchtigkeit-Pipeline
+wombat run ltw8_humidity.yaml
 ```
 
 ## Kubernetes Deployment
@@ -14,25 +19,45 @@ wombat run ltw8_temperature.yaml
 ### Secret erstellen
 
 ```bash
-kubectl create secret generic nats --from-file=creds=/path/to/credentials.creds
+kubectl create secret generic nats --from-file=creds=/path/to/credentials.creds -n clima
 ```
 
-### ConfigMap erstellen
+### ConfigMaps erstellen
 
 ```bash
-kubectl create configmap ltw8-temperature-config --from-file=ltw8_temperature.yaml
+# Temperatur-Pipeline
+kubectl create configmap ltw8-temperature-config --from-file=ltw8_temperature.yaml -n clima
+
+# Luftfeuchtigkeit-Pipeline
+kubectl create configmap ltw8-humidity-config --from-file=ltw8_humidity.yaml -n clima
 ```
 
-### ConfigMap aktualisieren
+### ConfigMaps aktualisieren
 
 ```bash
+# Temperatur-Pipeline
 kubectl create configmap ltw8-temperature-config \
   --from-file=ltw8_temperature.yaml \
-  --dry-run=client -o yaml | kubectl apply -f -
+  --dry-run=client -o yaml -n clima | kubectl apply -f -
+
+# Luftfeuchtigkeit-Pipeline
+kubectl create configmap ltw8-humidity-config \
+  --from-file=ltw8_humidity.yaml \
+  --dry-run=client -o yaml -n clima | kubectl apply -f -
 ```
 
 ### Deployment anwenden
 
 ```bash
 kubectl apply -f deployment.yaml
+```
+
+## Tests ausführen
+
+```bash
+# Temperatur-Pipeline testen
+wombat test ltw8_temperature_benthos_test.yaml
+
+# Luftfeuchtigkeit-Pipeline testen
+wombat test ltw8_humidity_benthos_test.yaml
 ```
