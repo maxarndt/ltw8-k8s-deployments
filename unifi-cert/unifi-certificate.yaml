@@ -1,0 +1,21 @@
+# unifi-certificate.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: unifi-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: unifi-ltw8-net
+  namespace: unifi-cert
+spec:
+  secretName: unifi-ltw8-net-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  commonName: unifi.ltw8.net
+  dnsNames:
+    - unifi.ltw8.net
+  duration: 2160h    # 90 Tage
+  renewBefore: 720h  # 30 Tage vor Ablauf erneuern

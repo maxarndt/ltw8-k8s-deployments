@@ -1,0 +1,194 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: unifi-cert-sync-script
+  namespace: unifi-cert
+data:
+  sync.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    UNIFI_HOST="${UNIFI_HOST}"
+    UNIFI_USER="${UNIFI_USER}"
+    UNIFI_PASS="${UNIFI_PASS}"
+    CERT_NAME_PREFIX="${CERT_NAME_PREFIX:-cert-manager}"
+    CERT_PATH="/certs/tls.crt"
+    KEY_PATH="/certs/tls.key"
+    COOKIE_JAR=$(mktemp)
+    HEADERS_FILE=$(mktemp)
+
+    cleanup() { rm -f "${COOKIE_JAR}" "${HEADERS_FILE}"; }
+    trap cleanup EXIT
+
+    echo "[$(date)] Starting Unifi cert sync..."
+
+    api_call() {
+      local method="$1" path="$2" data="${3:-}"
+      local args=(-sk --compressed -b "${COOKIE_JAR}" \
+        -H "Content-Type: application/json" \
+        -H "Accept: application/json" \
+        -H "X-CSRF-Token: ${CSRF_TOKEN}" \
+        -w "\n%{http_code}" \
+        -X "${method}" \
+        "https://${UNIFI_HOST}${path}")
+      [ -n "${data}" ] && args+=(-d "${data}")
+      curl "${args[@]}"
+    }
+
+    parse_response() {
+      local raw="$1"
+      RESP_BODY=$(echo "${raw}" | head -n -1)
+      RESP_HTTP=$(echo "${raw}" | tail -1)
+    }
+
+    # ---- Login ----
+    LOGIN_PAYLOAD=$(jq -n --arg u "${UNIFI_USER}" --arg p "${UNIFI_PASS}" \
+      '{username: $u, password: $p, rememberMe: false}')
+
+    HTTP_CODE=$(curl -sk --compressed -c "${COOKIE_JAR}" -D "${HEADERS_FILE}" \
+      -o /tmp/login.json -w "%{http_code}" \
+      -H "Content-Type: application/json" \
+      -X POST -d "${LOGIN_PAYLOAD}" \
+      "https://${UNIFI_HOST}/api/auth/login")
+    [ "${HTTP_CODE}" != "200" ] && { echo "Login failed: ${HTTP_CODE}"; cat /tmp/login.json; exit 1; }
+    CSRF_TOKEN=$(grep -i "^x-csrf-token:" "${HEADERS_FILE}" | awk '{print $2}' | tr -d '\r\n')
+    echo "Login OK"
+
+    # ---- Fingerprint als Idempotenz-Key ----
+    FINGERPRINT=$(openssl x509 -in "${CERT_PATH}" -noout -fingerprint -sha256 \
+      | cut -d= -f2 | tr -d ':' | tr 'A-Z' 'a-z')
+    CERT_NAME="${CERT_NAME_PREFIX}-${FINGERPRINT:0:16}"
+    echo "Cert name: ${CERT_NAME}"
+
+    # ---- Existierende Zerts laden ----
+    echo "Fetching existing certificates..."
+    parse_response "$(api_call GET "/api/userCertificates")"
+
+    if ! echo "${RESP_BODY}" | jq empty 2>/dev/null; then
+      echo "ERROR: GET /api/userCertificates returned HTTP ${RESP_HTTP}, body: ${RESP_BODY}"
+      exit 1
+    fi
+
+    CERTS=$(echo "${RESP_BODY}" | jq 'if type == "array" then . else .data // [] end')
+
+    # ---- Idempotenz: schon aktiv? ----
+    ALREADY_ACTIVE=$(echo "${CERTS}" | jq -r --arg name "${CERT_NAME}" \
+      '.[] | select(.name == $name and .active == true) | .id' | head -1)
+
+    if [ -n "${ALREADY_ACTIVE}" ]; then
+      echo "Certificate '${CERT_NAME}' already active (id: ${ALREADY_ACTIVE}). Nothing to do."
+      exit 0
+    fi
+
+    # ---- Existiert aber inaktiv? ----
+    EXISTING_ID=$(echo "${CERTS}" | jq -r --arg name "${CERT_NAME}" \
+      '.[] | select(.name == $name and .active == false) | .id' | head -1)
+
+    if [ -n "${EXISTING_ID}" ]; then
+      echo "Certificate exists but inactive, reactivating (id: ${EXISTING_ID})..."
+      NEW_ID="${EXISTING_ID}"
+    else
+      # ---- Upload ----
+      echo "Uploading new certificate..."
+      UPLOAD_PAYLOAD=$(jq -n \
+        --arg name "${CERT_NAME}" \
+        --arg cert "$(cat ${CERT_PATH})" \
+        --arg key  "$(cat ${KEY_PATH})" \
+        '{name: $name, cert: $cert, key: $key}')
+
+      parse_response "$(api_call POST "/api/userCertificates" "${UPLOAD_PAYLOAD}")"
+      echo "Upload HTTP ${RESP_HTTP}"
+
+      [ "${RESP_HTTP}" != "200" ] && [ "${RESP_HTTP}" != "201" ] && {
+        echo "ERROR: Upload failed. Body: ${RESP_BODY}"; exit 1
+      }
+
+      NEW_ID=$(echo "${RESP_BODY}" | jq -r '.id // empty')
+      [ -z "${NEW_ID}" ] && { echo "ERROR: No ID in upload response"; exit 1; }
+      echo "Uploaded, ID: ${NEW_ID}"
+    fi
+
+    # ---- Aktivieren ----
+    echo "Activating ${NEW_ID}..."
+    parse_response "$(api_call PUT "/api/userCertificates/${NEW_ID}/status" '{"active":true}')"
+    echo "Activation HTTP ${RESP_HTTP}"
+    [ "${RESP_HTTP}" != "200" ] && [ "${RESP_HTTP}" != "204" ] && {
+      echo "ERROR: Activation failed. Body: ${RESP_BODY}"; exit 1
+    }
+
+    # ---- Cleanup alter cert-manager Zerts ----
+    echo "Cleaning up old cert-manager certificates..."
+    OLD_IDS=$(echo "${CERTS}" | jq -r \
+      --arg prefix "${CERT_NAME_PREFIX}" \
+      --arg keep "${NEW_ID}" \
+      '.[] | select(.name | startswith($prefix)) | select(.id != $keep) | .id')
+
+    if [ -z "${OLD_IDS}" ]; then
+      echo "No old certificates to clean up."
+    else
+      for old_id in ${OLD_IDS}; do
+        echo "  Deleting old cert ${old_id}..."
+        parse_response "$(api_call DELETE "/api/userCertificates/${old_id}")"
+        [ "${RESP_HTTP}" = "200" ] || [ "${RESP_HTTP}" = "204" ] \
+          && echo "  Deleted." \
+          || echo "  Delete failed (HTTP ${RESP_HTTP}), continuing."
+      done
+    fi
+
+    echo "[$(date)] Sync complete. Certificate '${CERT_NAME}' is active."
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: unifi-cert-sync
+  namespace: unifi-cert
+spec:
+  schedule: "0 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: sync
+              image: alpine:3.20
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  apk add --no-cache bash curl jq openssl >/dev/null
+                  exec bash /scripts/sync.sh
+              env:
+                - name: UNIFI_HOST
+                  valueFrom:
+                    secretKeyRef:
+                      name: unifi-credentials
+                      key: host
+                - name: UNIFI_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: unifi-credentials
+                      key: username
+                - name: UNIFI_PASS
+                  valueFrom:
+                    secretKeyRef:
+                      name: unifi-credentials
+                      key: password
+              volumeMounts:
+                - name: cert
+                  mountPath: /certs
+                  readOnly: true
+                - name: script
+                  mountPath: /scripts
+                  readOnly: true
+          volumes:
+            - name: cert
+              secret:
+                secretName: unifi-ltw8-net-tls
+            - name: script
+              configMap:
+                name: unifi-cert-sync-script
+                defaultMode: 0755
