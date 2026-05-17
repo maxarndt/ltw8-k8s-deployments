@@ -1,0 +1,43 @@
+# K8up Operator Helm Chart Configuration
+# Chart: https://k8up-io.github.io/k8up
+#
+# K8up backs up PVCs by spawning per-PVC restic jobs that mount the PVC
+# directly (ReadWriteOnce). Unlike Velero's node-agent, no hostPath into
+# the kubelet pod directory and no privileged container is required —
+# this works cleanly under Talos' default pod security standards.
+
+image:
+  registry: ghcr.io
+  repository: k8up-io/k8up
+  tag: v2
+  pullPolicy: IfNotPresent
+
+metrics:
+  service:
+    # VictoriaMetrics scrapes k8up_backups_failed_counter etc. from this
+    # Service (see observability/victoriametrics.yaml, scrape job "k8up").
+    # These operator-level counters drive the backup-failure alerts.
+    enabled: true
+  serviceMonitor:
+    # We don't use prometheus-operator — VM scrapes directly via its own config.
+    enabled: false
+
+resources:
+  requests:
+    cpu: 20m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+# Default resource settings for backup/restore jobs spawned by the operator.
+k8up:
+  envVars:
+    - name: BACKUP_GLOBALMEMORYREQUEST
+      value: "64Mi"
+    - name: BACKUP_GLOBALMEMORYLIMIT
+      value: "256Mi"
+    - name: BACKUP_GLOBALCPUREQUEST
+      value: "20m"
+    - name: BACKUP_GLOBALCPULIMIT
+      value: "500m"

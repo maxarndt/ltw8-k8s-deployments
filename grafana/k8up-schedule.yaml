@@ -1,0 +1,37 @@
+---
+# K8up maintenance schedule for the grafana namespace.
+#
+# The daily backup is driven by the orchestrator CronJob in k8up-system
+# (which scales the Deployment down first for a consistent snapshot). This
+# Schedule only handles repo-side maintenance — prune to enforce retention
+# and check to verify repo integrity. Both touch only the restic repo on B2
+# and can run while the application is up.
+apiVersion: k8up.io/v1
+kind: Schedule
+metadata:
+  name: grafana-maintenance
+  namespace: grafana
+spec:
+  failedJobsHistoryLimit: 2
+  successfulJobsHistoryLimit: 2
+  backend:
+    repoPasswordSecretRef:
+      name: k8up-backup-credentials
+      key: repo-password
+    s3:
+      endpoint: https://s3.eu-central-003.backblazeb2.com
+      bucket: ltw8-kubernetes-backup-01/grafana
+      accessKeyIDSecretRef:
+        name: k8up-backup-credentials
+        key: username
+      secretAccessKeySecretRef:
+        name: k8up-backup-credentials
+        key: password
+  prune:
+    schedule: '0 3 * * 0'
+    retention:
+      keepDaily: 7
+      keepWeekly: 4
+      keepMonthly: 6
+  check:
+    schedule: '0 4 1 * *'

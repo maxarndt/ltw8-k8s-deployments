@@ -1,0 +1,15 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRouteTCP
+metadata:
+  name: nats
+  namespace: nats
+spec:
+  entryPoints:
+    - nats
+  routes:
+    - match: HostSNI(`nats.ltw8.net`)
+      services:
+        - name: nats
+          port: 4222
+  tls:
+    passthrough: true

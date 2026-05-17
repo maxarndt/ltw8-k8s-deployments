@@ -1,0 +1,160 @@
+---
+# Backup orchestrator
+#
+# Daily at 02:00 local time:
+#   1. Scale each tracked Deployment to replicas=0 and wait for pods to terminate
+#      (releases ReadWriteOnce PVCs).
+#   2. Create one k8up Backup CR per namespace; each CR causes k8up to spawn
+#      a restic job that mounts the namespace's PVCs and pushes a snapshot to
+#      Backblaze B2 (one restic repo per namespace).
+#   3. Wait for each Backup CR to finish (success or failure).
+#   4. Scale Deployments back to replicas=1 (always, via trap on EXIT).
+#
+# Configuration is in the WORKLOADS env var: "namespace/deployment/uid[,namespace/deployment/uid ...]".
+# The uid is used for the Backup pod's runAsUser/runAsGroup/fsGroup so it can
+# read the application's PVC contents (e.g. nats writes /data with mode 0700
+# as uid 1000, k8up's default uid 65532 can't read that).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup-orchestrator
+  namespace: k8up-system
+spec:
+  schedule: "0 2 * * *"
+  timeZone: Europe/Berlin
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 3600
+      template:
+        spec:
+          serviceAccountName: backup-orchestrator
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: orchestrator
+              image: bitnamilegacy/kubectl:1.33.4
+              imagePullPolicy: IfNotPresent
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              env:
+                - name: WORKLOADS
+                  value: "grafana/grafana/472,observability/victoriametrics/65534,nats/nats/1000"
+                - name: BACKUP_TIMEOUT
+                  value: "30m"
+                - name: SCALE_DOWN_TIMEOUT
+                  value: "120s"
+                - name: B2_ENDPOINT
+                  value: "https://s3.eu-central-003.backblazeb2.com"
+                - name: B2_BUCKET
+                  value: "ltw8-kubernetes-backup-01"
+                - name: REPO_SECRET
+                  value: "k8up-backup-credentials"
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  set -uo pipefail
+                  TS=$(date +%Y%m%d-%H%M%S)
+                  IFS=',' read -ra ITEMS <<< "${WORKLOADS}"
+
+                  parse_item() {
+                    IFS='/' read -r ns name uid <<< "$1"
+                  }
+
+                  scale_up() {
+                    echo ">>> Scaling workloads back up..."
+                    for item in "${ITEMS[@]}"; do
+                      parse_item "${item}"
+                      echo "scale up ${ns}/${name}"
+                      kubectl -n "${ns}" scale deployment/"${name}" --replicas=1 || true
+                    done
+                  }
+                  trap scale_up EXIT
+
+                  echo ">>> Scaling workloads down..."
+                  for item in "${ITEMS[@]}"; do
+                    parse_item "${item}"
+                    echo "scale down ${ns}/${name}"
+                    kubectl -n "${ns}" scale deployment/"${name}" --replicas=0
+                  done
+
+                  echo ">>> Waiting for pods to terminate..."
+                  for item in "${ITEMS[@]}"; do
+                    parse_item "${item}"
+                    # Succeeded pods linger (PodGC delay), so delete first, then wait.
+                    kubectl -n "${ns}" delete pod -l app="${name}" --ignore-not-found
+                    kubectl -n "${ns}" wait --for=delete \
+                      pod -l app="${name}" --timeout="${SCALE_DOWN_TIMEOUT}" || true
+                  done
+
+                  echo ">>> Creating Backup CRs..."
+                  declare -a BACKUPS
+                  for item in "${ITEMS[@]}"; do
+                    parse_item "${item}"
+                    bname="backup-${ns}-${TS}"
+                    BACKUPS+=("${ns}/${bname}")
+                    cat <<EOF | kubectl apply -f -
+                  apiVersion: k8up.io/v1
+                  kind: Backup
+                  metadata:
+                    name: ${bname}
+                    namespace: ${ns}
+                  spec:
+                    failedJobsHistoryLimit: 2
+                    successfulJobsHistoryLimit: 2
+                    podSecurityContext:
+                      runAsUser: ${uid}
+                      runAsGroup: ${uid}
+                      fsGroup: ${uid}
+                    backend:
+                      repoPasswordSecretRef:
+                        name: ${REPO_SECRET}
+                        key: repo-password
+                      s3:
+                        endpoint: ${B2_ENDPOINT}
+                        bucket: ${B2_BUCKET}/${ns}
+                        accessKeyIDSecretRef:
+                          name: ${REPO_SECRET}
+                          key: username
+                        secretAccessKeySecretRef:
+                          name: ${REPO_SECRET}
+                          key: password
+                  EOF
+                  done
+
+                  echo ">>> Waiting for Backup CRs to complete (timeout ${BACKUP_TIMEOUT})..."
+                  rc=0
+                  for entry in "${BACKUPS[@]}"; do
+                    ns="${entry%%/*}"; bname="${entry##*/}"
+                    if ! kubectl -n "${ns}" wait --for=condition=Completed \
+                        backup/"${bname}" --timeout="${BACKUP_TIMEOUT}"; then
+                      echo "WARN: ${ns}/${bname} did not reach Completed in time"
+                      rc=1
+                      continue
+                    fi
+                    reason=$(kubectl -n "${ns}" get backup/"${bname}" \
+                      -o jsonpath='{.status.conditions[?(@.type=="Completed")].reason}')
+                    echo "${ns}/${bname}: ${reason}"
+                    [[ "${reason}" == "Succeeded" ]] || rc=1
+                  done
+
+                  echo ">>> Done (exit ${rc})"
+                  exit "${rc}"
+          volumes:
+            - name: tmp
+              emptyDir: {}
