@@ -1,0 +1,101 @@
+---
+# Restore template — copy and adjust the marked fields before applying.
+#
+# Usage:
+#   1. Pick a snapshot to restore. List snapshots with the helper Job below
+#      (`list-snapshots`), or via `restic snapshots` on a machine that has
+#      the B2 credentials + repo password.
+#   2. Scale the target Deployment to 0:
+#        kubectl -n <ns> scale deployment/<name> --replicas=0
+#   3. Delete and recreate the PVC if you want a clean state, then re-apply
+#      the workload manifest so the PVC is recreated empty:
+#        kubectl -n <ns> delete pvc <pvc-name>
+#        kubectl apply -f ../<ns>/<workload>.yaml
+#   4. Edit the Restore CR below: set namespace, snapshot, claimName.
+#   5. kubectl apply -f restore-job-template.yaml
+#   6. Watch: kubectl -n <ns> get restore -w
+#   7. Once Completed=True, scale the Deployment back up:
+#        kubectl -n <ns> scale deployment/<name> --replicas=1
+apiVersion: k8up.io/v1
+kind: Restore
+metadata:
+  name: restore-REPLACE-ME
+  namespace: REPLACE_NAMESPACE   # grafana | observability | nats
+spec:
+  # Empty snapshot = latest. Otherwise paste the snapshot ID from
+  # `restic snapshots` or the k8up list-snapshots Job output.
+  snapshot: ""
+  restoreMethod:
+    folder:
+      claimName: REPLACE_PVC_NAME   # grafana-data | victoriametrics-data | nats-data
+  backend:
+    repoPasswordSecretRef:
+      name: k8up-backup-credentials
+      key: repo-password
+    s3:
+      endpoint: https://s3.eu-central-003.backblazeb2.com
+      bucket: ltw8-backup/REPLACE_NAMESPACE
+      accessKeyIDSecretRef:
+        name: k8up-backup-credentials
+        key: username
+      secretAccessKeySecretRef:
+        name: k8up-backup-credentials
+        key: password
+---
+# Helper: one-shot pod that runs `restic snapshots` against a specific
+# namespace's repo. Apply it, then `kubectl -n <ns> logs job/list-snapshots`.
+# Edit the bucket suffix to match the namespace you want to inspect.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: list-snapshots
+  namespace: REPLACE_NAMESPACE
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: restic
+          image: restic/restic:0.17.3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: RESTIC_REPOSITORY
+              value: s3:https://s3.eu-central-003.backblazeb2.com/ltw8-backup/REPLACE_NAMESPACE
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: k8up-backup-credentials
+                  key: username
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: k8up-backup-credentials
+                  key: password
+            - name: RESTIC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: k8up-backup-credentials
+                  key: repo-password
+            - name: HOME
+              value: /tmp
+            - name: XDG_CACHE_HOME
+              value: /tmp/cache
+          command: ["restic", "snapshots", "--compact"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

@@ -1,1 +1,7 @@
 .DS_Store
+
+# Never commit rendered secrets or local credential dumps.
+*-secret.local.yaml
+*-credentials.local.yaml
+kubeconfig
+
