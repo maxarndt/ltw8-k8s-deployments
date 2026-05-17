@@ -70,6 +70,19 @@ data:
           - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
             action: keep
             regex: true
+          # Pod SD emits one target per containerPort. For multi-port pods
+          # (kube-state-metrics 8080+8081, metallb 7472+7473 etc.) this
+          # produces duplicate targets that get rewritten to the same
+          # address via the annotation port below. Use vmagent's
+          # keep_if_equal (RE2 has no backreferences, so the vanilla
+          # Prometheus idiom `(\d+);\1` doesn't compile), guarded by an
+          # `if` clause so pods without an explicit prometheus.io/port
+          # annotation skip this filter entirely.
+          - source_labels:
+              - __meta_kubernetes_pod_annotation_prometheus_io_port
+              - __meta_kubernetes_pod_container_port_number
+            if: '{__meta_kubernetes_pod_annotation_prometheus_io_port=~".+"}'
+            action: keep_if_equal
           - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
             action: replace
             target_label: __metrics_path__
