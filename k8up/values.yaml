@@ -14,8 +14,12 @@ image:
 
 metrics:
   service:
-    enabled: false
+    # VictoriaMetrics scrapes k8up_backups_failed_counter etc. from this
+    # Service (see observability/victoriametrics.yaml, scrape job "k8up").
+    # These operator-level counters drive the backup-failure alerts.
+    enabled: true
   serviceMonitor:
+    # We don't use prometheus-operator — VM scrapes directly via its own config.
     enabled: false
 
 resources:

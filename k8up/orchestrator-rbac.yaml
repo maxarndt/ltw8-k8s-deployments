@@ -15,7 +15,9 @@ rules:
     verbs: ["get", "list", "patch", "update"]
   - apiGroups: [""]
     resources: ["pods"]
-    verbs: ["get", "list", "watch"]
+    # delete is needed because Succeeded scale-down pods linger until PodGC,
+    # and `kubectl wait --for=delete` would otherwise time out.
+    verbs: ["get", "list", "watch", "delete"]
   - apiGroups: ["k8up.io"]
     resources: ["backups"]
     verbs: ["get", "list", "watch", "create", "delete"]

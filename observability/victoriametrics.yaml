@@ -21,6 +21,10 @@ data:
         static_configs:
           - targets: ['kube-state-metrics.observability.svc:8080']
 
+      - job_name: 'k8up'
+        static_configs:
+          - targets: ['k8up-metrics.k8up-system.svc:8080']
+
       - job_name: 'kubelet'
         scheme: https
         tls_config:

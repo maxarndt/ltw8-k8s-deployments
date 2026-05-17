@@ -34,7 +34,7 @@ spec:
       key: repo-password
     s3:
       endpoint: https://s3.eu-central-003.backblazeb2.com
-      bucket: ltw8-backup/REPLACE_NAMESPACE
+      bucket: ltw8-kubernetes-backup-01/REPLACE_NAMESPACE
       accessKeyIDSecretRef:
         name: k8up-backup-credentials
         key: username
@@ -72,7 +72,7 @@ spec:
               drop: ["ALL"]
           env:
             - name: RESTIC_REPOSITORY
-              value: s3:https://s3.eu-central-003.backblazeb2.com/ltw8-backup/REPLACE_NAMESPACE
+              value: s3:https://s3.eu-central-003.backblazeb2.com/ltw8-kubernetes-backup-01/REPLACE_NAMESPACE
             - name: AWS_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:

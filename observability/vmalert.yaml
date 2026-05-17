@@ -1,0 +1,148 @@
+---
+# vmalert evaluates alerting rules against VictoriaMetrics and exposes the
+# resulting alert state via /api/v1/alerts. No external notifier wired up
+# (-notifier.blackhole) — visibility is via Grafana / API for now. Add
+# Alertmanager later by replacing the flag with -notifier.url.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vmalert-rules
+  namespace: observability
+  labels:
+    app: vmalert
+data:
+  k8up-backups.yaml: |
+    groups:
+      - name: k8up-backups
+        interval: 1m
+        rules:
+          - alert: BackupOrchestratorFailed
+            # The orchestrator CronJob exits non-zero if any of the 3 ns
+            # backups (grafana, observability, nats) failed. kube_job_failed
+            # is set per Job by kube-state-metrics. max by() collapses the
+            # double-scrape from kube-state-metrics + kubernetes-pods jobs.
+            expr: max by (job_name) (kube_job_failed{namespace="k8up-system", job_name=~"backup-orchestrator-.*"}) == 1
+            for: 5m
+            labels:
+              severity: critical
+              component: k8up
+            annotations:
+              summary: "Backup orchestrator run {{ $labels.job_name }} failed"
+              description: "At least one of grafana/observability/nats backups did not reach Succeeded. Inspect: kubectl -n k8up-system logs job/{{ $labels.job_name }}"
+
+          - alert: BackupOrchestratorStale
+            # CronJob is daily at 02:00 — give 2h slack before alerting.
+            expr: time() - max(kube_cronjob_status_last_successful_time{cronjob="backup-orchestrator"}) > 26*3600
+            for: 30m
+            labels:
+              severity: warning
+              component: k8up
+            annotations:
+              summary: "Backup orchestrator hasn't completed successfully in 26+ hours"
+              description: "Daily backup is overdue. Last successful run finished at {{ humanizeTimestamp $value }} UTC (computed: time() - last_success)."
+
+          - alert: K8upOperatorDown
+            # If the operator is gone or its metrics endpoint is unreachable
+            # the k8up_schedules_gauge series disappear entirely. absent()
+            # fires when no series matches.
+            expr: absent(k8up_schedules_gauge)
+            for: 5m
+            labels:
+              severity: critical
+              component: k8up
+            annotations:
+              summary: "k8up operator is not reporting any schedules"
+              description: "Either the operator pod is down or its metrics endpoint is unreachable. Check: kubectl -n k8up-system get pods,svc."
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vmalert
+  namespace: observability
+  labels:
+    app: vmalert
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: vmalert
+  template:
+    metadata:
+      labels:
+        app: vmalert
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8880"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: vmalert
+          image: victoriametrics/vmalert:v1.104.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          args:
+            - -datasource.url=http://victoriametrics.observability.svc.cluster.local:8428
+            - -rule=/etc/vmalert/rules/*.yaml
+            - -evaluationInterval=1m
+            - -notifier.blackhole
+            - -httpListenAddr=:8880
+          ports:
+            - name: http
+              containerPort: 8880
+              protocol: TCP
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "10m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          volumeMounts:
+            - name: rules
+              mountPath: /etc/vmalert/rules
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 10
+      volumes:
+        - name: rules
+          configMap:
+            name: vmalert-rules
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vmalert
+  namespace: observability
+  labels:
+    app: vmalert
+spec:
+  type: ClusterIP
+  selector:
+    app: vmalert
+  ports:
+    - name: http
+      port: 8880
+      targetPort: http
+      protocol: TCP

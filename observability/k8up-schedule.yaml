@@ -15,7 +15,7 @@ spec:
       key: repo-password
     s3:
       endpoint: https://s3.eu-central-003.backblazeb2.com
-      bucket: ltw8-backup/observability
+      bucket: ltw8-kubernetes-backup-01/observability
       accessKeyIDSecretRef:
         name: k8up-backup-credentials
         key: username

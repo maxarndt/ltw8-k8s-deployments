@@ -10,7 +10,10 @@
 #   3. Wait for each Backup CR to finish (success or failure).
 #   4. Scale Deployments back to replicas=1 (always, via trap on EXIT).
 #
-# Configuration is in the WORKLOADS env var: "namespace/deployment[,namespace/deployment ...]".
+# Configuration is in the WORKLOADS env var: "namespace/deployment/uid[,namespace/deployment/uid ...]".
+# The uid is used for the Backup pod's runAsUser/runAsGroup/fsGroup so it can
+# read the application's PVC contents (e.g. nats writes /data with mode 0700
+# as uid 1000, k8up's default uid 65532 can't read that).
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -47,7 +50,7 @@ spec:
                   drop: ["ALL"]
               env:
                 - name: WORKLOADS
-                  value: "grafana/grafana,observability/victoriametrics,nats/nats"
+                  value: "grafana/grafana/472,observability/victoriametrics/65534,nats/nats/1000"
                 - name: BACKUP_TIMEOUT
                   value: "30m"
                 - name: SCALE_DOWN_TIMEOUT
@@ -55,7 +58,7 @@ spec:
                 - name: B2_ENDPOINT
                   value: "https://s3.eu-central-003.backblazeb2.com"
                 - name: B2_BUCKET
-                  value: "ltw8-backup"
+                  value: "ltw8-kubernetes-backup-01"
                 - name: REPO_SECRET
                   value: "k8up-backup-credentials"
               volumeMounts:
@@ -69,10 +72,14 @@ spec:
                   TS=$(date +%Y%m%d-%H%M%S)
                   IFS=',' read -ra ITEMS <<< "${WORKLOADS}"
 
+                  parse_item() {
+                    IFS='/' read -r ns name uid <<< "$1"
+                  }
+
                   scale_up() {
                     echo ">>> Scaling workloads back up..."
                     for item in "${ITEMS[@]}"; do
-                      ns="${item%%/*}"; name="${item##*/}"
+                      parse_item "${item}"
                       echo "scale up ${ns}/${name}"
                       kubectl -n "${ns}" scale deployment/"${name}" --replicas=1 || true
                     done
@@ -81,14 +88,16 @@ spec:
 
                   echo ">>> Scaling workloads down..."
                   for item in "${ITEMS[@]}"; do
-                    ns="${item%%/*}"; name="${item##*/}"
+                    parse_item "${item}"
                     echo "scale down ${ns}/${name}"
                     kubectl -n "${ns}" scale deployment/"${name}" --replicas=0
                   done
 
                   echo ">>> Waiting for pods to terminate..."
                   for item in "${ITEMS[@]}"; do
-                    ns="${item%%/*}"; name="${item##*/}"
+                    parse_item "${item}"
+                    # Succeeded pods linger (PodGC delay), so delete first, then wait.
+                    kubectl -n "${ns}" delete pod -l app="${name}" --ignore-not-found
                     kubectl -n "${ns}" wait --for=delete \
                       pod -l app="${name}" --timeout="${SCALE_DOWN_TIMEOUT}" || true
                   done
@@ -96,7 +105,7 @@ spec:
                   echo ">>> Creating Backup CRs..."
                   declare -a BACKUPS
                   for item in "${ITEMS[@]}"; do
-                    ns="${item%%/*}"
+                    parse_item "${item}"
                     bname="backup-${ns}-${TS}"
                     BACKUPS+=("${ns}/${bname}")
                     cat <<EOF | kubectl apply -f -
@@ -108,6 +117,10 @@ spec:
                   spec:
                     failedJobsHistoryLimit: 2
                     successfulJobsHistoryLimit: 2
+                    podSecurityContext:
+                      runAsUser: ${uid}
+                      runAsGroup: ${uid}
+                      fsGroup: ${uid}
                     backend:
                       repoPasswordSecretRef:
                         name: ${REPO_SECRET}

@@ -16,9 +16,9 @@ k8up-system
     ├── scale nats/nats             → 0
     ├── wait for pods to terminate (releases RWO PVCs)
     │
-    ├── apply Backup CR in grafana       → k8up Job mounts grafana-data,         restic push → s3://ltw8-backup/grafana
-    ├── apply Backup CR in observability → k8up Job mounts victoriametrics-data, restic push → s3://ltw8-backup/observability
-    ├── apply Backup CR in nats          → k8up Job mounts nats-data,            restic push → s3://ltw8-backup/nats
+    ├── apply Backup CR in grafana       → k8up Job mounts grafana-data,         restic push → s3://ltw8-kubernetes-backup-01/grafana
+    ├── apply Backup CR in observability → k8up Job mounts victoriametrics-data, restic push → s3://ltw8-kubernetes-backup-01/observability
+    ├── apply Backup CR in nats          → k8up Job mounts nats-data,            restic push → s3://ltw8-kubernetes-backup-01/nats
     │
     └── trap EXIT: scale all Deployments back to 1
 ```
@@ -63,7 +63,7 @@ kubectl -n k8up-system logs job/manual-test -f
 ```
 
 Inspect the B2 bucket via the Backblaze UI — you should see
-`ltw8-backup/<ns>/{config,keys,data,snapshots,index}` after the first
+`ltw8-kubernetes-backup-01/<ns>/{config,keys,data,snapshots,index}` after the first
 successful run.
 
 ## Restore
