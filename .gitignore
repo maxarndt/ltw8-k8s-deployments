@@ -5,3 +5,7 @@
 *-credentials.local.yaml
 kubeconfig
 
+# Talos: CA keys, encryption secret, admin cert (talos/ has its own .gitignore too)
+talos/secrets.yaml
+talos/generated/
+

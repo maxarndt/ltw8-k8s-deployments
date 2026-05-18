@@ -1,0 +1,3 @@
+# Contain CA keys, K8s secret encryption key, admin client cert — never commit.
+generated/
+secrets.yaml

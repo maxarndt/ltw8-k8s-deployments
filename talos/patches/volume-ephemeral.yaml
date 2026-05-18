@@ -1,0 +1,12 @@
+# Begrenzt die EPHEMERAL-Partition (System /var) auf 30 GiB, damit der Rest
+# der System-Disk für u-local-storage frei bleibt.
+# Wirkt nur bei Erstinstallation — spätere Änderungen erfordern Wipe.
+apiVersion: v1alpha1
+kind: VolumeConfig
+name: EPHEMERAL
+provisioning:
+  diskSelector:
+    match: system_disk
+  minSize: 2GiB
+  maxSize: 30GiB
+  grow: false
