@@ -41,3 +41,5 @@ k8up:
       value: "20m"
     - name: BACKUP_GLOBALCPULIMIT
       value: "500m"
+    - name: BACKUP_PROMURL
+      value: ""
