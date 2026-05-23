@@ -2,7 +2,7 @@
 # Generiert Talos Machine-Configs für den Cluster.
 #
 # Usage:
-#   CLUSTER_NAME=ltw8-cluster NODE_IP=10.8.10.97 NODE_HOSTNAME=ltw8-cp-01 \
+#   CLUSTER_NAME=ltw8-cluster NODE_IP=10.8.10.98 NODE_HOSTNAME=talos-cp-0 \
 #     ./gen-config.sh
 #
 # Beim ersten Lauf wird secrets.yaml erzeugt (CA-Keys, encryption secret,
@@ -15,7 +15,7 @@ cd "$(dirname "$0")"
 
 : "${CLUSTER_NAME:?set CLUSTER_NAME (z.B. ltw8-cluster)}"
 : "${NODE_IP:?set NODE_IP (z.B. 10.8.10.97)}"
-: "${NODE_HOSTNAME:?set NODE_HOSTNAME (z.B. ltw8-cp-01)}"
+: "${NODE_HOSTNAME:?set NODE_HOSTNAME (z.B. talos-cp-0)}"
 
 command -v talosctl >/dev/null || { echo "talosctl nicht im PATH"; exit 1; }
 command -v yq       >/dev/null || { echo "yq nicht im PATH (brew install yq)"; exit 1; }

@@ -27,8 +27,8 @@ Single-Node Talos Cluster (Controlplane + Workloads auf demselben Node).
 
 ```sh
 CLUSTER_NAME=ltw8-cluster \
-NODE_IP=10.8.10.97 \
-NODE_HOSTNAME=ltw8-cp-01 \
+NODE_IP=10.8.10.98 \
+NODE_HOSTNAME=talos-cp-0 \
 ./gen-config.sh
 ```
 
