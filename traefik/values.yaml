@@ -26,6 +26,12 @@ ports:
     port: 8443
     exposedPort: 443
     protocol: TCP
+  mqtt:
+    port: 1883
+    exposedPort: 1883
+    protocol: TCP
+    expose:
+      default: true
   nats:
     port: 4222
     exposedPort: 4222
