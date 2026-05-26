@@ -1,12 +1,13 @@
 # Begrenzt die EPHEMERAL-Partition (System /var) auf 30 GiB, damit der Rest
-# der System-Disk für u-local-storage frei bleibt.
+# der NVMe für local-storage frei bleibt.
 # Wirkt nur bei Erstinstallation — spätere Änderungen erfordern Wipe.
+# Selektor matcht nur nvme0n1 (256 GB), NICHT den USB-Installer (sda) oder loop0.
 apiVersion: v1alpha1
 kind: VolumeConfig
 name: EPHEMERAL
 provisioning:
   diskSelector:
-    match: system_disk
+    match: disk.transport == "nvme"
   minSize: 2GiB
   maxSize: 30GiB
   grow: false

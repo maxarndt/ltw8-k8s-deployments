@@ -1,2 +1,7 @@
+machine:
+  install:
+    # Auf die NVMe installieren, NICHT auf den 32-GB-USB-Installer (/dev/sda).
+    # talosctl gen config würde sonst per Default /dev/sda wählen.
+    disk: /dev/nvme0n1
 cluster:
   allowSchedulingOnControlPlanes: true

@@ -94,10 +94,14 @@ automatisch. Bei manuellem `talosctl gen config` daran denken.
 
 ## Troubleshooting
 
-**Disk wird falsch erkannt**: `talosctl get disks` — falls nicht
-`system_disk` selektiert werden soll, in `patches/volume-*.yaml` z.B.
-`busPath` oder `model` als Selektor nutzen
-(https://www.talos.dev/latest/reference/configuration/block/volumeconfig/).
+**Disk-Selektor**: Der CEL-`match` in `patches/volume-*.yaml` und
+`machine.install.disk` müssen auf dieselbe physische Disk zeigen. `system_disk`
+ist als CEL-Variable **nicht** gültig (Fehler `no such attribute: system_disk`) —
+stattdessen `disk.*`-Properties nutzen: `disk.transport == "nvme"`,
+`disk.model == "..."` oder `disk.size > 200u * GB`. Verfügbare Disks +
+Attribute mit `talosctl get disks` prüfen. Achtung: ein USB-Installer-Stick
+taucht als eigene Disk (`sda`, transport `usb`) auf — nie versehentlich dorthin
+installieren.
 
 **Bootstrap hängt**: `talosctl logs etcd` und `talosctl dmesg`. Auf RPi
 früher häufig Disk-Performance — neue Hardware sollte das nicht haben.

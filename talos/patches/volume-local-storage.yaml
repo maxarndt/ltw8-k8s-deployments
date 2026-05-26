@@ -1,12 +1,12 @@
-# User Volume auf der System-Disk, gemountet unter /var/mnt/local-storage.
+# User Volume auf der NVMe, gemountet unter /var/mnt/local-storage.
 # Wird vom local-path-provisioner als Backing-Store genutzt (siehe ../local-path/).
-# grow: true → füllt den nach EPHEMERAL/STATE/Boot verbleibenden Platz auf.
-# Bei Disk-Wechsel auf größere Hardware wächst das Volume automatisch mit.
+# grow: true → füllt den nach EPHEMERAL/STATE/Boot verbleibenden NVMe-Platz auf.
+# Selektor matcht nur nvme0n1, nicht USB-Installer (sda) oder loop0.
 apiVersion: v1alpha1
 kind: UserVolumeConfig
 name: local-storage
 provisioning:
   diskSelector:
-    match: system_disk
+    match: disk.transport == "nvme"
   minSize: 10GiB
   grow: true
