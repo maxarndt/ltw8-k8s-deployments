@@ -190,6 +190,27 @@ spec:
         fsGroup: 65534
         seccompProfile:
           type: RuntimeDefault
+      # Korrigiert das PVC-Verzeichnis auf die Workload-UID. Nötig nach
+      # k8up-Restores, weil restic dann von einer anderen UID geschrieben hat.
+      # Idempotent: bei normalen Restarts ein No-Op.
+      initContainers:
+        - name: data-perm
+          image: busybox
+          command: ["sh", "-c", "chown -R 65534:65534 /data && chmod 0750 /data"]
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+            runAsGroup: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              add: ["CHOWN", "FOWNER", "DAC_OVERRIDE"]
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: data
+              mountPath: /data
       containers:
         - name: victoriametrics
           image: victoriametrics/victoria-metrics:v1.104.0
