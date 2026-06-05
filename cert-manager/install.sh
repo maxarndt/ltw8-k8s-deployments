@@ -5,5 +5,5 @@ helm repo update
 
 helm install cert-manager jetstack/cert-manager \
   --namespace cert-manager \
-  --version v1.16.1 \
+  --version v1.20.2 \
   --set crds.enabled=true

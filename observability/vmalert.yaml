@@ -85,7 +85,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: vmalert
-          image: victoriametrics/vmalert:v1.104.0
+          image: victoriametrics/vmalert:v1.144.0
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-METALLB_VERSION="v0.14.9"
+METALLB_VERSION="v0.16.0"
 
 echo "Installing MetalLB ${METALLB_VERSION}..."
 kubectl apply -f "https://raw.githubusercontent.com/metallb/metallb/${METALLB_VERSION}/config/manifests/metallb-native.yaml"
