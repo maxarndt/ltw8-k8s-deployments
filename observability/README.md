@@ -12,26 +12,29 @@ VictoriaMetrics als Prometheus-kompatible TSDB plus Standard-Scraper.
 
 ## Installation
 
+`node-exporter.yaml` legt den Namespace `observability` mit `pod-security.kubernetes.io/enforce=privileged` an (siehe Hinweis unten). Daher zuerst applyen, dann die anderen:
+
 ```sh
-kubectl create namespace observability --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -f node-exporter.yaml
 kubectl apply -f victoriametrics.yaml
 kubectl apply -f kube-state-metrics.yaml
-kubectl apply -f node-exporter.yaml
 kubectl apply -f vmalert.yaml
 kubectl apply -f k8up-schedule.yaml
 ```
 
 Grafana zeigt auf den ClusterIP-Service `victoriametrics.observability.svc:8428`.
 
-## PodSecurity-Warnings
+## PodSecurity
 
-Beim Apply erscheinen Warnings (`warn: restricted`), aber kein Enforcement
-blockt die Pods:
+`victoriametrics`, `kube-state-metrics` und `vmalert` würden auch unter
+`baseline` laufen (die `data-perm` initContainer-Capabilities werden von
+`baseline` erlaubt, nur von `restricted` blockiert). **`node-exporter`
+braucht aber Host-Zugriff** (`hostNetwork`/`hostPID`/`hostPort`/hostPath),
+was `baseline` enforced. Deshalb der Namespace-weite `privileged` Label.
 
-- `victoriametrics`: `data-perm` initContainer (root + `CHOWN/FOWNER/DAC_OVERRIDE`) — siehe [../k8up/README.md](../k8up/README.md#restore).
-- `node-exporter`: `hostNetwork`, `hostPID`, hostPath-Volumes — unvermeidbar.
-
-Kein Namespace-Label nötig — die Warnings sind kosmetisch.
+Wenn nach `kubectl apply` `kubectl -n observability get ds node-exporter`
+`READY 0/1` zeigt und `describe ds node-exporter` ein `FailedCreate` mit
+`violates PodSecurity baseline:latest` listet, fehlt das Label.
 
 ## Daten-Backup
 

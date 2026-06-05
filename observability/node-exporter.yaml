@@ -1,4 +1,19 @@
 ---
+# node-exporter braucht hostNetwork, hostPID, hostPort und hostPath. Der
+# Cluster-Default ist PodSecurity `enforce: baseline`, was diese vier
+# blockt — das DaemonSet würde mit FailedCreate hängen. Wir setzen den
+# Namespace daher auf `privileged`. Die übrigen Workloads in
+# observability (VictoriaMetrics, kube-state-metrics, vmalert) sind
+# baseline-kompatibel, laufen unter privileged aber genauso.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/warn: privileged
+    pod-security.kubernetes.io/audit: privileged
+---
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
