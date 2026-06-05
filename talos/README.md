@@ -73,6 +73,9 @@ kubectl kustomize ../local-path | kubectl apply -f -
 # Backup (install.sh fragt B2 keyID + applicationKey + restic password ab)
 (cd ../k8up && ./install.sh)
 
+# Metrics API (für kubectl top und Lens/FreeLens CPU/RAM Ansicht)
+(cd ../metrics-server && ./install.sh)
+
 # Apps: grafana, observability, nats, clima — pro Verzeichnis kubectl apply -f *.yaml
 ```
 
