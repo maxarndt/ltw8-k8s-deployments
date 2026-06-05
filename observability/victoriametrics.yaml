@@ -227,6 +227,7 @@ spec:
             - -memory.allowedPercent=60
             - -search.maxUniqueTimeseries=50000
             - -search.maxStalenessInterval=5m
+            - -vmalert.proxyURL=http://vmalert.observability.svc.cluster.local:8880
             - -httpListenAddr=:8428
           ports:
             - name: http
