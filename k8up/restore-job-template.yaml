@@ -1,21 +1,18 @@
 ---
 # Restore template — copy and adjust the marked fields before applying.
 #
-# Usage:
-#   1. Pick a snapshot to restore. List snapshots with the helper Job below
-#      (`list-snapshots`), or via `restic snapshots` on a machine that has
-#      the B2 credentials + repo password.
-#   2. Scale the target Deployment to 0:
-#        kubectl -n <ns> scale deployment/<name> --replicas=0
-#   3. Delete and recreate the PVC if you want a clean state, then re-apply
-#      the workload manifest so the PVC is recreated empty:
-#        kubectl -n <ns> delete pvc <pvc-name>
-#        kubectl apply -f ../<ns>/<workload>.yaml
-#   4. Edit the Restore CR below: set namespace, snapshot, claimName.
-#   5. kubectl apply -f restore-job-template.yaml
-#   6. Watch: kubectl -n <ns> get restore -w
-#   7. Once Completed=True, scale the Deployment back up:
-#        kubectl -n <ns> scale deployment/<name> --replicas=1
+# See ../k8up/README.md "Restore" for the full procedure. Short version:
+#   1. List snapshots via the helper Job at the bottom of this file
+#      (edit REPLACE_NAMESPACE, apply, read `kubectl -n <ns> logs job/list-snapshots`).
+#   2. Scale workload to 0 and wait for pod termination (releases the RWO PVC).
+#   3. Delete the PVC and re-create it as a standalone PVC manifest
+#      (do NOT re-apply the workload yaml — that scales replicas back to 1
+#      and the pod races the Restore onto the empty PVC).
+#   4. Edit the Restore CR below: namespace, snapshot, claimName, bucket suffix.
+#   5. kubectl apply -f <this-file>
+#   6. kubectl -n <ns> wait --for=condition=Completed restore/<name> --timeout=15m
+#   7. Scale workload back to 1. The `data-perm` initContainer on the workload
+#      fixes the ownership of the restored files automatically.
 apiVersion: k8up.io/v1
 kind: Restore
 metadata:

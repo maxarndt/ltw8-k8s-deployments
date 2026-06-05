@@ -75,14 +75,31 @@ successful run.
    kubectl apply -f restore-job-template.yaml   # only the Job part
    kubectl -n <ns> logs job/list-snapshots
    ```
-2. Scale the target Deployment to 0:
+2. Scale the target Deployment to 0 and wait for the pod to release the RWO PVC:
    ```sh
    kubectl -n <ns> scale deployment/<name> --replicas=0
+   kubectl -n <ns> wait --for=delete pod -l app=<name> --timeout=120s
    ```
-3. Clear the PVC (if you want a clean restore) and re-create it:
+3. Replace the PVC with an empty one. **Do not re-apply the full
+   workload manifest** — it resets the Deployment to `replicas: 1`, and
+   the pod will race the Restore Job onto the empty PVC. Instead apply
+   only a standalone PVC manifest (same name/size/storageClass as the
+   one in the workload), so no Pod gets scheduled:
    ```sh
    kubectl -n <ns> delete pvc <pvc-name>
-   kubectl apply -f ../<ns>/<workload>.yaml
+   kubectl apply -f - <<'EOF'
+   apiVersion: v1
+   kind: PersistentVolumeClaim
+   metadata:
+     name: <pvc-name>
+     namespace: <ns>
+   spec:
+     accessModes: [ReadWriteOnce]
+     storageClassName: local-path
+     resources:
+       requests:
+         storage: <size>
+   EOF
    ```
 4. Apply a `Restore` CR — copy [restore-job-template.yaml](restore-job-template.yaml),
    fill the `REPLACE_*` placeholders, apply.
@@ -91,6 +108,15 @@ successful run.
    kubectl -n <ns> wait --for=condition=Completed restore/<name> --timeout=15m
    kubectl -n <ns> scale deployment/<name> --replicas=1
    ```
+
+### Why the `data-perm` initContainer exists
+
+k8up's restore Job runs as uid `65532` (distroless), so restored files
+land owned by `65532:root` regardless of who the target workload runs
+as. The `nats`, `grafana` and `victoriametrics` Deployments each have a
+small root initContainer (`data-perm`) that `chown`s the PVC root to
+the workload's UID before the main container starts. Idempotent — a
+no-op on normal restarts.
 
 ## Troubleshooting
 
@@ -105,6 +131,26 @@ list-snapshots template, change command to `["restic", "unlock"]`).
 **Operator pod CrashLoopBackOff** after Talos upgrade: K8up needs to
 re-watch CRDs; deleting the operator pod usually fixes it.
 `kubectl -n k8up-system delete pod -l app.kubernetes.io/name=k8up`.
+
+**`Signature validation failed`** in a Backup/Restore/Schedule Pod:
+B2 credentials in the namespace-local `k8up-backup-credentials` Secret
+are wrong. `install.sh` creates the same Secret in all 3 namespaces in
+one go — if you fix or rotate credentials, update **all 3 namespaces**,
+otherwise the next backup/restore in the un-fixed namespace fails the
+same way. Sanity check across namespaces:
+
+```sh
+for ns in nats grafana observability; do
+  echo "--- $ns ---"
+  for k in username password repo-password; do
+    printf "%-15s " "$k"
+    kubectl -n $ns get secret k8up-backup-credentials \
+      -o jsonpath="{.data.$k}" | base64 -d | md5
+  done
+done
+```
+
+All three rows per field should hash identically.
 
 ## Why not Velero
 

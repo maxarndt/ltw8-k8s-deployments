@@ -62,14 +62,18 @@ In dieser Reihenfolge:
 # Storage zuerst (sonst hängen PVCs)
 kubectl kustomize ../local-path | kubectl apply -f -
 
-# Load Balancer + Ingress
-kubectl apply -k ../metallb
-kubectl apply -k ../traefik   # oder helm — je nach Verzeichnis
+# Load Balancer + Ingress (beides via install.sh — MetalLB applied YAML,
+# Traefik via Helm)
+(cd ../metallb && ./install.sh)
+(cd ../traefik && ./install.sh)
 
-# Cert-Verwaltung, Backup, dann die Apps
-kubectl apply -k ../cert-manager
-./../k8up/install.sh
-# ... grafana, observability, nats, clima
+# Cert-Verwaltung (install.sh fragt Cloudflare API Token ab)
+(cd ../cert-manager && ./install.sh)
+
+# Backup (install.sh fragt B2 keyID + applicationKey + restic password ab)
+(cd ../k8up && ./install.sh)
+
+# Apps: grafana, observability, nats, clima — pro Verzeichnis kubectl apply -f *.yaml
 ```
 
 ## Updates
