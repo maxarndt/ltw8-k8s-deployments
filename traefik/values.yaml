@@ -42,7 +42,7 @@ ports:
 service:
   type: LoadBalancer
   annotations:
-    metallb.universe.tf/loadBalancerIPs: "10.8.10.200"
+    metallb.io/loadBalancerIPs: "10.8.10.200"
 
 logs:
   general:
