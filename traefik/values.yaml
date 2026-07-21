@@ -38,17 +38,23 @@ ports:
     protocol: TCP
     expose:
       default: true
+  otlp-http:
+    port: 4318
+    exposedPort: 4318
+    protocol: TCP
+    expose:
+      default: true
 
 service:
   type: LoadBalancer
   annotations:
     metallb.io/loadBalancerIPs: "10.8.10.200"
 
-logs:
-  general:
-    level: INFO
-  access:
-    enabled: true
+log:
+  level: INFO
+
+accessLog:
+  enabled: true
 
 resources:
   requests:
