@@ -25,6 +25,14 @@ data:
         static_configs:
           - targets: ['k8up-metrics.k8up-system.svc:8080']
 
+      - job_name: 'buderus'
+        scrape_interval: 30s
+        static_configs:
+          - targets: ['buderus.ltw8.net:9100']
+            labels:
+              floor: ug
+              room: heizraum
+
       - job_name: 'kubelet'
         scheme: https
         tls_config:
